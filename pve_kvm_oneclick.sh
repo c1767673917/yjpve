@@ -108,32 +108,40 @@ create_single_vm() {
         disk=10
     fi
     
-    read -p "SSH端口: " ssh_port
-    if [ -z "$ssh_port" ]; then
-        ssh_port=$((40000 + vmid))
-        echo -e "${YELLOW}未指定，使用默认值: ${ssh_port}${PLAIN}"
-    fi
-    
-    read -p "80端口: " http_port
-    if [ -z "$http_port" ]; then
-        http_port=$((41000 + vmid))
-        echo -e "${YELLOW}未指定，使用默认值: ${http_port}${PLAIN}"
-    fi
-    
-    read -p "443端口: " https_port
-    if [ -z "$https_port" ]; then
-        https_port=$((42000 + vmid))
-        echo -e "${YELLOW}未指定，使用默认值: ${https_port}${PLAIN}"
-    fi
-    
     read -p "是否开启全端口映射？(1-65535) (Y/N，默认N): " full_port
     if [[ "$full_port" =~ ^[Yy]$ ]]; then
         echo -e "${YELLOW}已启用全端口映射模式${PLAIN}"
+        # 自动设置特殊端口
+        ssh_port=$((40000 + vmid))
+        http_port=$((41000 + vmid))
+        https_port=$((42000 + vmid))
+        echo -e "${YELLOW}自动设置SSH端口: ${ssh_port}${PLAIN}"
+        echo -e "${YELLOW}自动设置HTTP端口: ${http_port}${PLAIN}"
+        echo -e "${YELLOW}自动设置HTTPS端口: ${https_port}${PLAIN}"
+        
         # 保留一些宿主机系统必要端口
         port_start=1025
         port_end=65535
         echo -e "${YELLOW}端口映射范围: ${port_start}-${port_end}${PLAIN}"
     else
+        read -p "SSH端口: " ssh_port
+        if [ -z "$ssh_port" ]; then
+            ssh_port=$((40000 + vmid))
+            echo -e "${YELLOW}未指定，使用默认值: ${ssh_port}${PLAIN}"
+        fi
+        
+        read -p "80端口: " http_port
+        if [ -z "$http_port" ]; then
+            http_port=$((41000 + vmid))
+            echo -e "${YELLOW}未指定，使用默认值: ${http_port}${PLAIN}"
+        fi
+        
+        read -p "443端口: " https_port
+        if [ -z "$https_port" ]; then
+            https_port=$((42000 + vmid))
+            echo -e "${YELLOW}未指定，使用默认值: ${https_port}${PLAIN}"
+        fi
+        
         read -p "内外网映射端口起始 (例如50000): " port_start
         if [ -z "$port_start" ]; then
             port_start=50000
@@ -187,6 +195,7 @@ create_single_vm() {
             echo -e "${YELLOW}HTTP端口: ${http_port}${PLAIN}"
             echo -e "${YELLOW}HTTPS端口: ${https_port}${PLAIN}"
             echo -e "${YELLOW}其他所有端口(${port_start}-${port_end})都已映射到宿主机相同端口号。${PLAIN}"
+            echo -e "${YELLOW}记得在/etc/ssh/sshd_config中将SSH端口修改为22，体验更接近独立IP。${PLAIN}"
         fi
     else
         echo -e "${RED}虚拟机创建失败！${PLAIN}"
