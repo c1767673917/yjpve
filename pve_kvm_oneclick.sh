@@ -126,16 +126,25 @@ create_single_vm() {
         echo -e "${YELLOW}未指定，使用默认值: ${https_port}${PLAIN}"
     fi
     
-    read -p "内外网映射端口起始 (例如50000): " port_start
-    if [ -z "$port_start" ]; then
-        port_start=50000
-        echo -e "${YELLOW}未指定，使用默认值: ${port_start}${PLAIN}"
-    fi
-    
-    read -p "内外网映射端口结束 (例如50025): " port_end
-    if [ -z "$port_end" ]; then
-        port_end=$((port_start + 25))
-        echo -e "${YELLOW}未指定，使用默认值: ${port_end}${PLAIN}"
+    read -p "是否开启全端口映射？(1-65535) (Y/N，默认N): " full_port
+    if [[ "$full_port" =~ ^[Yy]$ ]]; then
+        echo -e "${YELLOW}已启用全端口映射模式${PLAIN}"
+        # 保留一些宿主机系统必要端口
+        port_start=1025
+        port_end=65535
+        echo -e "${YELLOW}端口映射范围: ${port_start}-${port_end}${PLAIN}"
+    else
+        read -p "内外网映射端口起始 (例如50000): " port_start
+        if [ -z "$port_start" ]; then
+            port_start=50000
+            echo -e "${YELLOW}未指定，使用默认值: ${port_start}${PLAIN}"
+        fi
+        
+        read -p "内外网映射端口结束 (例如50025): " port_end
+        if [ -z "$port_end" ]; then
+            port_end=$((port_start + 25))
+            echo -e "${YELLOW}未指定，使用默认值: ${port_end}${PLAIN}"
+        fi
     fi
     
     read -p "系统 (例如debian11): " os
@@ -166,6 +175,19 @@ create_single_vm() {
     if [ $? -eq 0 ]; then
         echo -e "${GREEN}虚拟机创建成功！VMID: ${vmid}${PLAIN}"
         echo -e "${YELLOW}可以执行 'cat vm${vmid}' 查看详细信息${PLAIN}"
+        
+        # 全端口映射设置说明
+        if [[ "$full_port" =~ ^[Yy]$ ]]; then
+            echo -e "${GREEN}================${PLAIN}"
+            echo -e "${GREEN}全端口映射已开启${PLAIN}"
+            echo -e "${GREEN}================${PLAIN}"
+            echo -e "${YELLOW}此虚拟机现在拥有几乎所有端口的映射，除了系统保留的1-1024端口。${PLAIN}"
+            echo -e "${YELLOW}您可以在虚拟机内使用任意端口，无需额外配置端口映射。${PLAIN}"
+            echo -e "${YELLOW}SSH端口: ${ssh_port}${PLAIN}"
+            echo -e "${YELLOW}HTTP端口: ${http_port}${PLAIN}"
+            echo -e "${YELLOW}HTTPS端口: ${https_port}${PLAIN}"
+            echo -e "${YELLOW}其他所有端口(${port_start}-${port_end})都已映射到宿主机相同端口号。${PLAIN}"
+        fi
     else
         echo -e "${RED}虚拟机创建失败！${PLAIN}"
     fi
