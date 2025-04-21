@@ -1,0 +1,658 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PVE KVM虚拟机管理</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css">
+    <style>
+        body {
+            padding-top: 20px;
+            background-color: #f8f9fa;
+        }
+        .card {
+            margin-bottom: 20px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+        .card-header {
+            background-color: #f1f8ff;
+            font-weight: bold;
+        }
+        .nav-tabs .nav-link.active {
+            background-color: #0d6efd;
+            color: white;
+        }
+        .terminal {
+            background-color: #212529;
+            color: #f8f9fa;
+            padding: 15px;
+            border-radius: 5px;
+            font-family: 'Courier New', Courier, monospace;
+            height: 300px;
+            overflow-y: auto;
+            margin-top: 20px;
+        }
+        .btn-icon {
+            margin-right: 5px;
+        }
+        .vm-list-table {
+            font-size: 0.9rem;
+        }
+        .status-running {
+            color: #198754;
+            font-weight: bold;
+        }
+        .status-stopped {
+            color: #dc3545;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="row mb-4">
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-header bg-primary text-white">
+                        <h3 class="card-title mb-0"><i class="bi bi-hdd-rack"></i> PVE KVM虚拟机管理面板</h3>
+                    </div>
+                    <div class="card-body">
+                        <div id="pve-check-alert" class="alert alert-warning d-none">
+                            <i class="bi bi-exclamation-triangle-fill"></i> 未检测到PVE环境，请先安装PVE
+                            <button id="install-pve-btn" class="btn btn-warning btn-sm ms-3">立即安装PVE</button>
+                        </div>
+                        
+                        <ul class="nav nav-tabs" id="myTab" role="tablist">
+                            <li class="nav-item" role="presentation">
+                                <button class="nav-link active" id="vm-list-tab" data-bs-toggle="tab" data-bs-target="#vm-list" type="button" role="tab">
+                                    <i class="bi bi-list-ul"></i> 虚拟机列表
+                                </button>
+                            </li>
+                            <li class="nav-item" role="presentation">
+                                <button class="nav-link" id="create-vm-tab" data-bs-toggle="tab" data-bs-target="#create-vm" type="button" role="tab">
+                                    <i class="bi bi-plus-circle"></i> 创建虚拟机
+                                </button>
+                            </li>
+                            <li class="nav-item" role="presentation">
+                                <button class="nav-link" id="batch-create-tab" data-bs-toggle="tab" data-bs-target="#batch-create" type="button" role="tab">
+                                    <i class="bi bi-collection"></i> 批量创建
+                                </button>
+                            </li>
+                            <li class="nav-item" role="presentation">
+                                <button class="nav-link" id="delete-all-tab" data-bs-toggle="tab" data-bs-target="#delete-all" type="button" role="tab">
+                                    <i class="bi bi-trash"></i> 删除所有虚拟机
+                                </button>
+                            </li>
+                            <li class="nav-item" role="presentation">
+                                <button class="nav-link" id="optimize-tab" data-bs-toggle="tab" data-bs-target="#optimize" type="button" role="tab">
+                                    <i class="bi bi-gear"></i> 环境优化
+                                </button>
+                            </li>
+                        </ul>
+                        
+                        <div class="tab-content p-3" id="myTabContent">
+                            <!-- 虚拟机列表 -->
+                            <div class="tab-pane fade show active" id="vm-list" role="tabpanel">
+                                <div class="d-flex justify-content-between mb-3">
+                                    <h4>当前虚拟机列表</h4>
+                                    <button id="refresh-vm-list" class="btn btn-outline-primary">
+                                        <i class="bi bi-arrow-clockwise"></i> 刷新列表
+                                    </button>
+                                </div>
+                                <div class="table-responsive">
+                                    <table class="table table-striped table-hover vm-list-table">
+                                        <thead>
+                                            <tr>
+                                                <th>VMID</th>
+                                                <th>名称</th>
+                                                <th>状态</th>
+                                                <th>内存</th>
+                                                <th>启动时间</th>
+                                                <th>操作</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody id="vm-list-body">
+                                            <tr>
+                                                <td colspan="6" class="text-center">正在加载虚拟机列表...</td>
+                                            </tr>
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                            
+                            <!-- 创建虚拟机 -->
+                            <div class="tab-pane fade" id="create-vm" role="tabpanel">
+                                <h4 class="mb-3">创建新虚拟机</h4>
+                                <form id="create-vm-form">
+                                    <div class="row g-3">
+                                        <div class="col-md-4">
+                                            <label for="vmid" class="form-label">VMID (100-256)</label>
+                                            <input type="number" class="form-control" id="vmid" name="vmid" min="100" max="256" required>
+                                        </div>
+                                        <div class="col-md-4">
+                                            <label for="username" class="form-label">用户名 (纯英文)</label>
+                                            <input type="text" class="form-control" id="username" name="username" required>
+                                        </div>
+                                        <div class="col-md-4">
+                                            <label for="password" class="form-label">密码</label>
+                                            <input type="password" class="form-control" id="password" name="password" required>
+                                        </div>
+                                        
+                                        <div class="col-md-4">
+                                            <label for="cpu" class="form-label">CPU核数</label>
+                                            <input type="number" class="form-control" id="cpu" name="cpu" min="1" value="1">
+                                        </div>
+                                        <div class="col-md-4">
+                                            <label for="memory" class="form-label">内存大小(MB)</label>
+                                            <input type="number" class="form-control" id="memory" name="memory" min="128" value="512">
+                                        </div>
+                                        <div class="col-md-4">
+                                            <label for="disk" class="form-label">硬盘大小(GB)</label>
+                                            <input type="number" class="form-control" id="disk" name="disk" min="5" value="10">
+                                        </div>
+                                        
+                                        <div class="col-md-4">
+                                            <label for="os" class="form-label">系统</label>
+                                            <select class="form-select" id="os" name="os">
+                                                <option value="debian11" selected>Debian 11</option>
+                                                <option value="debian10">Debian 10</option>
+                                                <option value="ubuntu20">Ubuntu 20.04</option>
+                                                <option value="ubuntu22">Ubuntu 22.04</option>
+                                                <option value="centos7">CentOS 7</option>
+                                            </select>
+                                        </div>
+                                        <div class="col-md-4">
+                                            <label for="storage" class="form-label">存储盘</label>
+                                            <input type="text" class="form-control" id="storage" name="storage" value="local">
+                                        </div>
+                                        <div class="col-md-4">
+                                            <label for="ipv6" class="form-label">绑定独立IPV6</label>
+                                            <select class="form-select" id="ipv6" name="ipv6">
+                                                <option value="N" selected>否</option>
+                                                <option value="Y">是</option>
+                                            </select>
+                                        </div>
+                                        
+                                        <div class="col-12">
+                                            <div class="form-check form-switch">
+                                                <input class="form-check-input" type="checkbox" id="full_port_switch" name="full_port_switch">
+                                                <label class="form-check-label" for="full_port_switch">
+                                                    开启全端口映射 (1025-65535)
+                                                </label>
+                                                <input type="hidden" id="full_port" name="full_port" value="N">
+                                            </div>
+                                        </div>
+                                        
+                                        <div id="port-settings" class="row g-3">
+                                            <div class="col-md-4">
+                                                <label for="ssh_port" class="form-label">SSH端口</label>
+                                                <input type="number" class="form-control" id="ssh_port" name="ssh_port">
+                                            </div>
+                                            <div class="col-md-4">
+                                                <label for="http_port" class="form-label">HTTP端口</label>
+                                                <input type="number" class="form-control" id="http_port" name="http_port">
+                                            </div>
+                                            <div class="col-md-4">
+                                                <label for="https_port" class="form-label">HTTPS端口</label>
+                                                <input type="number" class="form-control" id="https_port" name="https_port">
+                                            </div>
+                                            
+                                            <div class="col-md-6">
+                                                <label for="port_start" class="form-label">内外网映射端口起始</label>
+                                                <input type="number" class="form-control" id="port_start" name="port_start" value="50000">
+                                            </div>
+                                            <div class="col-md-6">
+                                                <label for="port_end" class="form-label">内外网映射端口结束</label>
+                                                <input type="number" class="form-control" id="port_end" name="port_end" value="50025">
+                                            </div>
+                                        </div>
+                                        
+                                        <div class="col-12">
+                                            <button type="submit" class="btn btn-primary">
+                                                <i class="bi bi-check-circle"></i> 创建虚拟机
+                                            </button>
+                                        </div>
+                                    </div>
+                                </form>
+                                
+                                <div id="create-vm-output" class="terminal d-none"></div>
+                            </div>
+                            
+                            <!-- 批量创建 -->
+                            <div class="tab-pane fade" id="batch-create" role="tabpanel">
+                                <h4 class="mb-3">批量创建虚拟机</h4>
+                                <div class="alert alert-info">
+                                    <i class="bi bi-info-circle"></i> 批量创建将运行交互式脚本，可能需要在命令行输入参数。
+                                </div>
+                                
+                                <form id="batch-create-form">
+                                    <div class="form-check form-switch mb-3">
+                                        <input class="form-check-input" type="checkbox" id="use_screen_switch" checked>
+                                        <label class="form-check-label" for="use_screen_switch">
+                                            使用screen在后台运行 (推荐)
+                                        </label>
+                                        <input type="hidden" id="use_screen" name="use_screen" value="Y">
+                                    </div>
+                                    
+                                    <button type="submit" class="btn btn-primary">
+                                        <i class="bi bi-collection"></i> 开始批量创建
+                                    </button>
+                                </form>
+                                
+                                <div id="batch-create-output" class="terminal d-none"></div>
+                                <div id="screen-info" class="alert alert-success mt-3 d-none">
+                                    批量创建已在screen会话中启动，使用命令 <code>screen -r pve_batch_vm</code> 查看进度。
+                                </div>
+                            </div>
+                            
+                            <!-- 删除所有虚拟机 -->
+                            <div class="tab-pane fade" id="delete-all" role="tabpanel">
+                                <h4 class="mb-3">删除所有虚拟机</h4>
+                                <div class="alert alert-danger">
+                                    <i class="bi bi-exclamation-triangle-fill"></i> 警告：此操作将删除所有虚拟机和相关配置，且无法恢复！
+                                </div>
+                                
+                                <form id="delete-all-form">
+                                    <div class="mb-3">
+                                        <label for="confirm_delete" class="form-label">输入 "yes" 确认删除所有虚拟机</label>
+                                        <input type="text" class="form-control" id="confirm_delete" name="confirm" required>
+                                    </div>
+                                    
+                                    <button type="submit" class="btn btn-danger">
+                                        <i class="bi bi-trash"></i> 确认删除所有虚拟机
+                                    </button>
+                                </form>
+                                
+                                <div id="delete-all-output" class="terminal d-none"></div>
+                            </div>
+                            
+                            <!-- 环境优化 -->
+                            <div class="tab-pane fade" id="optimize" role="tabpanel">
+                                <h4 class="mb-3">PVE环境优化</h4>
+                                <div class="alert alert-info">
+                                    <i class="bi bi-info-circle"></i> 此操作将优化PVE环境，包括网络配置、内核参数等。
+                                </div>
+                                
+                                <button id="optimize-env-btn" class="btn btn-primary">
+                                    <i class="bi bi-gear"></i> 开始环境优化
+                                </button>
+                                
+                                <div id="optimize-output" class="terminal d-none"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- 删除虚拟机确认模态框 -->
+    <div class="modal fade" id="deleteVMModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header bg-danger text-white">
+                    <h5 class="modal-title">删除虚拟机</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <p>确定要删除VMID为 <span id="delete-vmid-display"></span> 的虚拟机吗？</p>
+                    <p class="text-danger">此操作不可恢复！</p>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                    <button type="button" class="btn btn-danger" id="confirm-delete-vm">确认删除</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- 查看虚拟机信息模态框 -->
+    <div class="modal fade" id="viewVMModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header bg-primary text-white">
+                    <h5 class="modal-title">虚拟机详细信息</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div id="vm-detail-output" class="terminal"></div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">关闭</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/jquery@3.6.0/dist/jquery.min.js"></script>
+    <script>
+        $(document).ready(function() {
+            // 检查PVE环境
+            checkPVE();
+            
+            // 加载虚拟机列表
+            loadVMList();
+            
+            // 刷新虚拟机列表按钮
+            $('#refresh-vm-list').click(function() {
+                loadVMList();
+            });
+            
+            // 全端口映射开关
+            $('#full_port_switch').change(function() {
+                if ($(this).is(':checked')) {
+                    $('#full_port').val('Y');
+                    $('#port-settings').hide();
+                } else {
+                    $('#full_port').val('N');
+                    $('#port-settings').show();
+                }
+            });
+            
+            // Screen开关
+            $('#use_screen_switch').change(function() {
+                if ($(this).is(':checked')) {
+                    $('#use_screen').val('Y');
+                } else {
+                    $('#use_screen').val('N');
+                }
+            });
+            
+            // 创建虚拟机表单提交
+            $('#create-vm-form').submit(function(e) {
+                e.preventDefault();
+                
+                // 检查VMID是否在范围内
+                const vmid = $('#vmid').val();
+                if (vmid < 100 || vmid > 256) {
+                    alert('VMID必须在100-256范围内');
+                    return;
+                }
+                
+                // 检查用户名是否有效
+                const username = $('#username').val();
+                if (!username || /^\d+$/.test(username)) {
+                    alert('用户名不能为空或纯数字');
+                    return;
+                }
+                
+                // 显示终端输出区域
+                $('#create-vm-output').removeClass('d-none').html('<p>正在创建虚拟机，请稍候...</p>');
+                
+                // 提交表单
+                $.ajax({
+                    url: '/create_vm',
+                    type: 'POST',
+                    data: $(this).serialize(),
+                    success: function(response) {
+                        if (response.success) {
+                            // 开始轮询命令输出
+                            pollCommandOutput(response.output_key, '#create-vm-output');
+                        } else {
+                            $('#create-vm-output').append('<p class="text-danger">创建失败: ' + response.error + '</p>');
+                        }
+                    },
+                    error: function() {
+                        $('#create-vm-output').append('<p class="text-danger">创建请求失败，请检查网络连接</p>');
+                    }
+                });
+            });
+            
+            // 批量创建表单提交
+            $('#batch-create-form').submit(function(e) {
+                e.preventDefault();
+                
+                // 提交表单
+                $.ajax({
+                    url: '/batch_create',
+                    type: 'POST',
+                    data: $(this).serialize(),
+                    success: function(response) {
+                        if (response.success) {
+                            if ($('#use_screen').val() === 'Y') {
+                                $('#screen-info').removeClass('d-none');
+                            } else {
+                                $('#batch-create-output').removeClass('d-none').html('<p>正在批量创建虚拟机，请稍候...</p>');
+                                // 开始轮询命令输出
+                                pollCommandOutput(response.output_key, '#batch-create-output');
+                            }
+                        } else {
+                            $('#batch-create-output').removeClass('d-none')
+                                .append('<p class="text-danger">批量创建失败: ' + response.error + '</p>');
+                        }
+                    },
+                    error: function() {
+                        $('#batch-create-output').removeClass('d-none')
+                            .append('<p class="text-danger">批量创建请求失败，请检查网络连接</p>');
+                    }
+                });
+            });
+            
+            // 删除所有虚拟机表单提交
+            $('#delete-all-form').submit(function(e) {
+                e.preventDefault();
+                
+                const confirm = $('#confirm_delete').val();
+                if (confirm !== 'yes') {
+                    alert('请输入"yes"确认删除所有虚拟机');
+                    return;
+                }
+                
+                // 显示终端输出区域
+                $('#delete-all-output').removeClass('d-none').html('<p>正在删除所有虚拟机，请稍候...</p>');
+                
+                // 提交表单
+                $.ajax({
+                    url: '/delete_all_vms',
+                    type: 'POST',
+                    data: $(this).serialize(),
+                    success: function(response) {
+                        if (response.success) {
+                            // 开始轮询命令输出
+                            pollCommandOutput(response.output_key, '#delete-all-output');
+                        } else {
+                            $('#delete-all-output').append('<p class="text-danger">删除失败: ' + response.error + '</p>');
+                        }
+                    },
+                    error: function() {
+                        $('#delete-all-output').append('<p class="text-danger">删除请求失败，请检查网络连接</p>');
+                    }
+                });
+            });
+            
+            // 环境优化按钮点击
+            $('#optimize-env-btn').click(function() {
+                // 显示终端输出区域
+                $('#optimize-output').removeClass('d-none').html('<p>正在优化PVE环境，请稍候...</p>');
+                
+                // 发送优化请求
+                $.ajax({
+                    url: '/optimize_env',
+                    type: 'POST',
+                    success: function(response) {
+                        if (response.success) {
+                            // 开始轮询命令输出
+                            pollCommandOutput(response.output_key, '#optimize-output');
+                        } else {
+                            $('#optimize-output').append('<p class="text-danger">优化失败: ' + response.error + '</p>');
+                        }
+                    },
+                    error: function() {
+                        $('#optimize-output').append('<p class="text-danger">优化请求失败，请检查网络连接</p>');
+                    }
+                });
+            });
+            
+            // 删除虚拟机按钮点击
+            $(document).on('click', '.delete-vm-btn', function() {
+                const vmid = $(this).data('vmid');
+                $('#delete-vmid-display').text(vmid);
+                $('#confirm-delete-vm').data('vmid', vmid);
+                $('#deleteVMModal').modal('show');
+            });
+            
+            // 确认删除虚拟机
+            $('#confirm-delete-vm').click(function() {
+                const vmid = $(this).data('vmid');
+                
+                // 关闭模态框
+                $('#deleteVMModal').modal('hide');
+                
+                // 发送删除请求
+                $.ajax({
+                    url: '/delete_vm',
+                    type: 'POST',
+                    data: { vmid: vmid },
+                    success: function(response) {
+                        if (response.success) {
+                            alert('删除命令已发送，VMID: ' + vmid);
+                            // 刷新虚拟机列表
+                            setTimeout(loadVMList, 3000);
+                        } else {
+                            alert('删除失败: ' + response.error);
+                        }
+                    },
+                    error: function() {
+                        alert('删除请求失败，请检查网络连接');
+                    }
+                });
+            });
+            
+            // 查看虚拟机详情
+            $(document).on('click', '.view-vm-btn', function() {
+                const vmid = $(this).data('vmid');
+                $('#vm-detail-output').html('正在加载虚拟机详细信息...');
+                $('#viewVMModal').modal('show');
+                
+                // 执行cat命令获取详情
+                $.ajax({
+                    url: '/command_output/' + getCommandKey('cat_vm_' + vmid),
+                    type: 'GET',
+                    success: function(response) {
+                        if (response.success) {
+                            const outputHtml = response.output.join('<br>');
+                            $('#vm-detail-output').html(outputHtml);
+                        } else {
+                            $('#vm-detail-output').html('<p class="text-danger">获取详情失败: ' + response.error + '</p>');
+                        }
+                    },
+                    error: function() {
+                        $('#vm-detail-output').html('<p class="text-danger">获取详情请求失败，请检查网络连接</p>');
+                    }
+                });
+            });
+            
+            // 安装PVE按钮
+            $('#install-pve-btn').click(function() {
+                if (confirm('确定要安装PVE吗？此操作可能需要重启服务器。')) {
+                    // 执行安装命令
+                    // ...
+                }
+            });
+            
+            // 设置VMID时自动计算默认端口
+            $('#vmid').change(function() {
+                const vmid = parseInt($(this).val());
+                if (!isNaN(vmid)) {
+                    $('#ssh_port').val(40000 + vmid);
+                    $('#http_port').val(41000 + vmid);
+                    $('#https_port').val(42000 + vmid);
+                }
+            });
+        });
+        
+        // 检查PVE环境
+        function checkPVE() {
+            $.ajax({
+                url: '/check_pve',
+                type: 'GET',
+                success: function(response) {
+                    if (!response.installed) {
+                        $('#pve-check-alert').removeClass('d-none');
+                    }
+                }
+            });
+        }
+        
+        // 加载虚拟机列表
+        function loadVMList() {
+            $('#vm-list-body').html('<tr><td colspan="6" class="text-center">正在加载虚拟机列表...</td></tr>');
+            
+            $.ajax({
+                url: '/vm_list',
+                type: 'GET',
+                success: function(response) {
+                    if (response.success && response.vms.length > 0) {
+                        let html = '';
+                        
+                        response.vms.forEach(function(vm) {
+                            const statusClass = vm.STATUS.includes('running') ? 'status-running' : 'status-stopped';
+                            
+                            html += `<tr>
+                                <td>${vm.VMID}</td>
+                                <td>${vm.NAME}</td>
+                                <td class="${statusClass}">${vm.STATUS}</td>
+                                <td>${vm.MEM}</td>
+                                <td>${vm.UPTIME || '-'}</td>
+                                <td>
+                                    <div class="btn-group">
+                                        <button class="btn btn-sm btn-info view-vm-btn" data-vmid="${vm.VMID}">
+                                            <i class="bi bi-eye"></i>
+                                        </button>
+                                        <button class="btn btn-sm btn-danger delete-vm-btn" data-vmid="${vm.VMID}">
+                                            <i class="bi bi-trash"></i>
+                                        </button>
+                                    </div>
+                                </td>
+                            </tr>`;
+                        });
+                        
+                        $('#vm-list-body').html(html);
+                    } else {
+                        $('#vm-list-body').html('<tr><td colspan="6" class="text-center">没有找到虚拟机</td></tr>');
+                    }
+                },
+                error: function() {
+                    $('#vm-list-body').html('<tr><td colspan="6" class="text-center text-danger">加载失败，请检查网络连接</td></tr>');
+                }
+            });
+        }
+        
+        // 轮询命令输出
+        function pollCommandOutput(outputKey, outputSelector) {
+            const intervalId = setInterval(function() {
+                $.ajax({
+                    url: '/command_output/' + outputKey,
+                    type: 'GET',
+                    success: function(response) {
+                        if (response.success) {
+                            const outputHtml = response.output.join('<br>');
+                            $(outputSelector).html(outputHtml);
+                            
+                            // 滚动到底部
+                            $(outputSelector).scrollTop($(outputSelector)[0].scrollHeight);
+                            
+                            // 如果命令已完成，停止轮询
+                            if (!response.running) {
+                                clearInterval(intervalId);
+                                
+                                // 如果是创建或删除操作，刷新虚拟机列表
+                                if (outputKey.includes('create_vm') || outputKey.includes('delete')) {
+                                    setTimeout(loadVMList, 2000);
+                                }
+                            }
+                        }
+                    }
+                });
+            }, 1000);
+        }
+        
+        // 生成命令输出键
+        function getCommandKey(command) {
+            const timestamp = Math.floor(Date.now() / 1000);
+            return command + '_' + timestamp;
+        }
+    </script>
+</body>
+</html> 
